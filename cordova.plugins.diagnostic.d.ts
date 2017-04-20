@@ -807,22 +807,33 @@ interface Diagnostic {
 
     /**
      * iOS ONLY
-     * Checks if it's possible to determine the outcome of a motion authorization request on the current device.
+     * Checks if it's possible to determine the motion authorization status on the current device.
      * @param successCallback
      * @param errorCallback
      */
-    isMotionRequestOutcomeAvailable?: (
+    isMotionAuthorizationStatusAvailable?: (
         successCallback: (available: boolean) => void,
         errorCallback: (error: string) => void
     ) => void;
 
     /**
      * iOS ONLY
-     * Requests and checks motion authorization for the application.
+     * Requests motion authorization for the application.
      * @param successCallback
      * @param errorCallback
      */
-    requestAndCheckMotionAuthorization?: (
+    requestMotionAuthorization?: (
+        successCallback: (status: string) => void,
+        errorCallback: (error: string) => void
+    ) => void;
+
+    /**
+     * iOS ONLY
+     * Checks motion authorization status for the application.
+     * @param successCallback
+     * @param errorCallback
+     */
+    getMotionAuthorizationStatus?: (
         successCallback: (status: string) => void,
         errorCallback: (error: string) => void
     ) => void;

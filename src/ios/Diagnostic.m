@@ -16,6 +16,7 @@
 
 @end
 
+NSString*const motionAuthorizationStatusUnavailableMessage = @"Pedometer tracking not available on this device - cannot determine motion authorization status";
 
 @implementation Diagnostic
 
@@ -234,11 +235,11 @@ ABAddressBookRef _addressBook;
 }
 
 - (BOOL) isWifiEnabled {
-
+    
     NSCountedSet * cset = [NSCountedSet new];
-
+    
     struct ifaddrs *interfaces;
-
+    
     if( ! getifaddrs(&interfaces) ) {
         for( struct ifaddrs *interface = interfaces; interface; interface = interface->ifa_next) {
             if ( (interface->ifa_flags & IFF_UP) == IFF_UP ) {
@@ -246,7 +247,7 @@ ABAddressBookRef _addressBook;
             }
         }
     }
-
+    
     return [cset countForObject:@"awdl0"] > 1 ? YES : NO;
 }
 
@@ -751,11 +752,11 @@ ABAddressBookRef _addressBook;
     }
 }
 
-- (void) isMotionRequestOutcomeAvailable:(CDVInvokedUrlCommand *)command
+- (void) isMotionAuthorizationStatusAvailable:(CDVInvokedUrlCommand *)command
 {
     @try {
         
-        [self sendPluginResultBool:[self isMotionRequestOutcomeAvailable] :command];
+        [self sendPluginResultBool:[self isMotionAuthorizationStatusAvailable] :command];
     }
     @catch (NSException *exception) {
         [self handlePluginException:exception :command];
@@ -763,57 +764,54 @@ ABAddressBookRef _addressBook;
 }
 
 
-- (void) requestAndCheckMotionAuthorization: (CDVInvokedUrlCommand*)command
+- (void) requestMotionAuthorization: (CDVInvokedUrlCommand*)command
 {
     @try {
-        if([self isMotionAvailable]){
-            [self.motionManager startActivityUpdatesToQueue:self.motionActivityQueue withHandler:^(CMMotionActivity *activity) {
-                @try {
-                    [self.motionManager stopActivityUpdates];
-                    if([self isMotionRequestOutcomeAvailable]){
-                        CMPedometer* cmPedometer = [[CMPedometer alloc] init];
-                        [cmPedometer queryPedometerDataFromDate:[NSDate date]
-                             toDate:[NSDate date]
-                        withHandler:^(CMPedometerData* data, NSError *error) {
-                            @try {
-                                NSString* status;
-                                if (error != nil && error.code == CMErrorMotionActivityNotAuthorized) {
-                                    status = @"denied";
-                                }else if (error != nil && (
-                                                           error.code == CMErrorMotionActivityNotEntitled
-                                                           || error.code == CMErrorMotionActivityNotAvailable
-                                                           )) {
-                                    status = @"restricted";
+        [self _checkMotionAuthorization:^(NSString* status) {
+            if([status isEqual: @"denied"]){
+                [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Motion authorization has been denied and cannot be requested again"] :command];
+            }else{
+                if([self isMotionAvailable]){
+                    [self.motionManager startActivityUpdatesToQueue:self.motionActivityQueue withHandler:^(CMMotionActivity *activity) {
+                        @try {
+                            [self.motionManager stopActivityUpdates];
+                            
+                            [self _checkMotionAuthorization:^(NSString* status) {
+                                if([status isEqual: @"not_available"]){
+                                    [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"not_determined"] :command];
                                 }else{
-                                    status = @"authorized";
+                                    [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:status] :command];
                                 }
-                                
-                                NSLog(@"Motion access is %@", status);
-                                [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:status] :command];
-                            }@catch (NSException *exception) {
-                                [self handlePluginException:exception :command];
-                            }
-                        }];
-                    }else{
-                        NSLog(@"Pedometer tracking not available on this device - cannot determine motion authorization status");
-                        [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"not_determined"] :command];
-                    }
-                }@catch (NSException *exception) {
-                    [self handlePluginException:exception :command];
+                            }];
+                            [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:status] :command];
+                        }@catch (NSException *exception) {
+                            [self handlePluginException:exception :command];
+                        }
+                    }];
+                }else{
+                    NSString* errMsg = @"Activity tracking not available on this device";
+                    NSLog(@"%@", errMsg);
+                    [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:errMsg] :command];
                 }
-            }];
-        }else{
-            NSString* errMsg = @"Activity tracking not available on this device";
-            NSLog(@"%@", errMsg);
-            [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:errMsg] :command];
-        }
-        
-
+            }
+        }];
     }@catch (NSException *exception) {
         [self handlePluginException:exception :command];
     }
 }
-        
+
+- (void) getMotionAuthorizationStatus: (CDVInvokedUrlCommand*)command
+{
+    [self checkMotionAuthorization:^(NSString* status) {
+        NSLog(@"Motion access is %@", status);
+        if([status isEqual: @"not_available"]){
+            [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:motionAuthorizationStatusUnavailableMessage] :command];
+        }else{
+            [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:status] :command];
+        }
+    }];
+}
+
 
 /********************************/
 #pragma mark - Send results
@@ -855,7 +853,7 @@ ABAddressBookRef _addressBook;
     return [CMMotionActivityManager isActivityAvailable];
 }
 
-- (BOOL) isMotionRequestOutcomeAvailable
+- (BOOL) isMotionAuthorizationStatusAvailable
 {
     return [CMPedometer respondsToSelector:@selector(isPedometerEventTrackingAvailable)] && [CMPedometer isPedometerEventTrackingAvailable];
 }
@@ -1084,6 +1082,37 @@ ABAddressBookRef _addressBook;
     
     
     return state;
+}
+
+- (void) checkMotionAuthorization:(void (^)(NSString*))completeBlock
+{
+    if([self isMotionAuthorizationStatusAvailable]){
+        CMPedometer* cmPedometer = [[CMPedometer alloc] init];
+        [cmPedometer queryPedometerDataFromDate:[NSDate date]
+                                         toDate:[NSDate date]
+                                    withHandler:^(CMPedometerData* data, NSError *error) {
+            
+            NSString* status;
+            if (error != nil && error.code == CMErrorMotionActivityNotAuthorized) {
+                status = @"denied";
+            }else if (error != nil && (
+                                       error.code == CMErrorMotionActivityNotEntitled
+                                       || error.code == CMErrorMotionActivityNotAvailable
+                                       )) {
+                status = @"restricted";
+            }else{
+                status = @"authorized";
+            }
+            
+            NSLog(@"Motion access is %@", status);
+            completeBlock(@"status");
+            
+        }];
+    }else{
+        NSLog(motionAuthorizationStatusUnavailableMessage);
+        completeBlock(@"not_available");
+    }
+    
 }
 
 /********************************/

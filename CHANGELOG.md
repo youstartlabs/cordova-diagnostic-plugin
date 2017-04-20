@@ -1,4 +1,10 @@
 # CHANGELOG
+**v3.6.0**
+* Deprecated `isMotionRequestOutcomeAvailable()` in favour of `isMotionAuthorizationStatusAvailable()`
+* Deprecated `requestAndCheckMotionAuthorization()` in favour of `requestMotionAuthorization()`
+* Added `getMotionAuthorizationStatus()` to check for motion authorization status (on devices that support Pedometer Event Tracking).
+* Updated documentation to clarify which iOS devices support motion tracking and Pedometer Event Tracking.
+
 **v3.5.0**
 * Enable option to request/check only CAMERA permission on Android when using camera methods. Fixes #178.
 
