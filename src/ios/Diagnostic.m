@@ -767,7 +767,7 @@ ABAddressBookRef _addressBook;
 - (void) requestMotionAuthorization: (CDVInvokedUrlCommand*)command
 {
     @try {
-        [self _checkMotionAuthorization:^(NSString* status) {
+        [self checkMotionAuthorization:^(NSString* status) {
             if([status isEqual: @"denied"]){
                 [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Motion authorization has been denied and cannot be requested again"] :command];
             }else{
@@ -776,7 +776,7 @@ ABAddressBookRef _addressBook;
                         @try {
                             [self.motionManager stopActivityUpdates];
                             
-                            [self _checkMotionAuthorization:^(NSString* status) {
+                            [self checkMotionAuthorization:^(NSString* status) {
                                 if([status isEqual: @"not_available"]){
                                     [self sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"not_determined"] :command];
                                 }else{
